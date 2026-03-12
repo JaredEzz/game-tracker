@@ -8,6 +8,7 @@ let games = [];
 let logs = [];
 let selectedDate = todayStr();
 let selectedGameIds = new Set();
+let gameNotes = {}; // { gameId: 'note text' }
 
 function todayStr() {
   const d = new Date();
@@ -39,6 +40,8 @@ function openModal(date) {
 
   const logsForDate = logs.filter(l => l.date === selectedDate);
   selectedGameIds = new Set(logsForDate.map(l => l.game_id));
+  gameNotes = {};
+  logsForDate.forEach(l => { if (l.note) gameNotes[l.game_id] = l.note; });
 
   renderGameList();
   document.getElementById('modal-overlay').classList.add('active');
@@ -51,22 +54,44 @@ function closeModal() {
 
 function renderGameList() {
   const list = document.getElementById('game-list');
+  const isSelected = id => selectedGameIds.has(id);
   list.innerHTML = games.map(g => `
-    <div class="game-item ${selectedGameIds.has(g.id) ? 'selected' : ''}" data-id="${g.id}">
-      <div class="dot" style="background: ${g.color}"></div>
-      <span class="name">${esc(g.name)}</span>
-      <button class="delete-game" data-id="${g.id}" title="Delete game">&times;</button>
+    <div class="game-item ${isSelected(g.id) ? 'selected' : ''}" data-id="${g.id}">
+      <div class="game-item-header">
+        <div class="dot" style="background: ${g.color}"></div>
+        <span class="name">${esc(g.name)}</span>
+        <button class="delete-game" data-id="${g.id}" title="Delete game">&times;</button>
+      </div>
+      <input type="text" class="note-input ${isSelected(g.id) ? 'visible' : ''}" data-id="${g.id}"
+        placeholder="Add a note..." value="${esc(gameNotes[g.id] || '')}">
     </div>
   `).join('');
 
-  list.querySelectorAll('.game-item').forEach(el => {
-    el.addEventListener('click', (e) => {
+  list.querySelectorAll('.game-item-header').forEach(header => {
+    header.addEventListener('click', (e) => {
       if (e.target.classList.contains('delete-game')) return;
+      const el = header.closest('.game-item');
       const id = Number(el.dataset.id);
-      if (selectedGameIds.has(id)) selectedGameIds.delete(id);
-      else selectedGameIds.add(id);
+      const noteInput = el.querySelector('.note-input');
+      if (selectedGameIds.has(id)) {
+        selectedGameIds.delete(id);
+        delete gameNotes[id];
+        noteInput.value = '';
+      } else {
+        selectedGameIds.add(id);
+      }
       el.classList.toggle('selected');
+      noteInput.classList.toggle('visible');
+      if (selectedGameIds.has(id)) noteInput.focus();
     });
+  });
+
+  list.querySelectorAll('.note-input').forEach(input => {
+    input.addEventListener('input', () => {
+      const id = Number(input.dataset.id);
+      gameNotes[id] = input.value;
+    });
+    input.addEventListener('click', e => e.stopPropagation());
   });
 
   list.querySelectorAll('.delete-game').forEach(el => {
@@ -112,8 +137,12 @@ async function saveLogs() {
   const toAdd = [...selectedGameIds].filter(id => !existingIds.has(id));
   const toRemove = [...existingIds].filter(id => !selectedGameIds.has(id));
 
+  // Also update notes for games that were already selected
+  const toUpdate = [...selectedGameIds].filter(id => existingIds.has(id));
+
   await Promise.all([
-    ...toAdd.map(game_id => api('/logs', { method: 'POST', body: { game_id, date: selectedDate } })),
+    ...toAdd.map(game_id => api('/logs', { method: 'POST', body: { game_id, date: selectedDate, note: gameNotes[game_id] || '' } })),
+    ...toUpdate.map(game_id => api('/logs', { method: 'POST', body: { game_id, date: selectedDate, note: gameNotes[game_id] || '' } })),
     ...toRemove.map(game_id => api('/logs', { method: 'DELETE', body: { game_id, date: selectedDate } })),
   ]);
 
@@ -183,7 +212,7 @@ function renderCalendar() {
     }
 
     if (dayLogs.length > 0) {
-      dot.dataset.tooltip = dayLogs.map(l => l.name).join(', ');
+      dot.dataset.tooltip = dayLogs.map(l => l.note ? `${l.name}: ${l.note}` : l.name).join(' | ');
     }
 
     dot.addEventListener('click', () => openModal(dateStr));

@@ -19,10 +19,14 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,
     date TEXT NOT NULL,
+    note TEXT DEFAULT '',
     UNIQUE(game_id, date)
   );
   CREATE INDEX IF NOT EXISTS idx_logs_date ON logs(date);
 `);
+
+// Migration: add note column if missing
+try { db.exec('ALTER TABLE logs ADD COLUMN note TEXT DEFAULT ""'); } catch (e) { /* already exists */ }
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -52,20 +56,23 @@ app.delete('/api/games/:id', (req, res) => {
 // Logs
 app.get('/api/logs', (req, res) => {
   res.json(db.prepare(`
-    SELECT l.date, l.game_id, g.name, g.color
+    SELECT l.date, l.game_id, l.note, g.name, g.color
     FROM logs l JOIN games g ON l.game_id = g.id
     ORDER BY l.date DESC
   `).all());
 });
 
 app.post('/api/logs', (req, res) => {
-  const { game_id, date } = req.body;
+  const { game_id, date, note } = req.body;
   if (!game_id || !date) return res.status(400).json({ error: 'game_id and date required' });
   try {
-    db.prepare('INSERT INTO logs (game_id, date) VALUES (?, ?)').run(game_id, date);
+    db.prepare('INSERT INTO logs (game_id, date, note) VALUES (?, ?, ?)').run(game_id, date, note || '');
     res.json({ ok: true });
   } catch (e) {
-    if (e.message.includes('UNIQUE')) return res.json({ ok: true, duplicate: true });
+    if (e.message.includes('UNIQUE')) {
+      db.prepare('UPDATE logs SET note = ? WHERE game_id = ? AND date = ?').run(note || '', game_id, date);
+      return res.json({ ok: true, updated: true });
+    }
     throw e;
   }
 });
