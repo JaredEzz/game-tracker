@@ -8,7 +8,7 @@ let games = [];
 let logs = [];
 let selectedDate = todayStr();
 let selectedGameIds = new Set();
-let gameNotes = {}; // { gameId: 'note text' }
+let gameNotes = {};
 
 function todayStr() {
   const d = new Date();
@@ -33,9 +33,47 @@ async function loadData() {
   [games, logs] = await Promise.all([api('/games'), api('/logs')]);
 }
 
-// Modal
-function openModal(date) {
+// --- View Modal (read-only) ---
+function openView(date) {
+  const logsForDate = logs.filter(l => l.date === date);
+  const viewGames = document.getElementById('view-games');
+  const isToday = date === todayStr();
+
+  document.getElementById('view-title').textContent = isToday ? 'Today' : formatDate(date).split(',')[0];
+  document.getElementById('view-date').textContent = formatDate(date);
+
+  if (logsForDate.length === 0) {
+    viewGames.innerHTML = '<div class="view-empty">Nothing logged</div>';
+  } else {
+    viewGames.innerHTML = logsForDate.map(l => `
+      <div class="view-game">
+        <div class="view-game-header">
+          <div class="dot" style="background: ${l.color}"></div>
+          <span class="name">${esc(l.name)}</span>
+        </div>
+        ${l.note ? `<div class="view-game-note">${esc(l.note)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  // Wire edit button to open edit modal for this date
+  document.getElementById('view-edit-btn').onclick = () => {
+    closeView();
+    openEditModal(date);
+  };
+
+  document.getElementById('view-overlay').classList.add('active');
+}
+
+function closeView() {
+  document.getElementById('view-overlay').classList.remove('active');
+}
+
+// --- Edit Modal ---
+function openEditModal(date) {
   selectedDate = date || todayStr();
+  const isToday = selectedDate === todayStr();
+  document.getElementById('edit-title').textContent = isToday ? 'What did you play today?' : 'Edit ' + formatDate(selectedDate).split(',')[0];
   document.getElementById('modal-date').textContent = formatDate(selectedDate);
 
   const logsForDate = logs.filter(l => l.date === selectedDate);
@@ -48,7 +86,7 @@ function openModal(date) {
   document.getElementById('new-game-name').focus();
 }
 
-function closeModal() {
+function closeEditModal() {
   document.getElementById('modal-overlay').classList.remove('active');
 }
 
@@ -88,8 +126,7 @@ function renderGameList() {
 
   list.querySelectorAll('.note-input').forEach(input => {
     input.addEventListener('input', () => {
-      const id = Number(input.dataset.id);
-      gameNotes[id] = input.value;
+      gameNotes[Number(input.dataset.id)] = input.value;
     });
     input.addEventListener('click', e => e.stopPropagation());
   });
@@ -123,7 +160,6 @@ async function addGame() {
   await loadData();
   selectedGameIds.add(result.id);
   nameInput.value = '';
-  // Cycle to next color
   const nextIdx = (COLORS.indexOf(color) + 1) % COLORS.length;
   colorInput.value = COLORS[nextIdx >= 0 ? nextIdx : Math.floor(Math.random() * COLORS.length)];
   renderGameList();
@@ -136,8 +172,6 @@ async function saveLogs() {
 
   const toAdd = [...selectedGameIds].filter(id => !existingIds.has(id));
   const toRemove = [...existingIds].filter(id => !selectedGameIds.has(id));
-
-  // Also update notes for games that were already selected
   const toUpdate = [...selectedGameIds].filter(id => existingIds.has(id));
 
   await Promise.all([
@@ -146,12 +180,15 @@ async function saveLogs() {
     ...toRemove.map(game_id => api('/logs', { method: 'DELETE', body: { game_id, date: selectedDate } })),
   ]);
 
+  const scrollY = window.scrollY;
   await loadData();
   renderCalendar();
-  closeModal();
+  renderLegend();
+  window.scrollTo({ top: scrollY });
+  closeEditModal();
 }
 
-// Calendar
+// --- Calendar ---
 function renderCalendar() {
   const cal = document.getElementById('calendar');
   cal.innerHTML = '';
@@ -160,15 +197,12 @@ function renderCalendar() {
   today.setHours(0, 0, 0, 0);
   const todayS = todayStr();
 
-  // Go back ~6 months
   const start = new Date(today);
   start.setMonth(start.getMonth() - 6);
-  // Align to Monday
   const dayOfWeek = start.getDay();
   const diffToMon = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   start.setDate(start.getDate() + diffToMon);
 
-  // Group logs by date
   const logsByDate = {};
   logs.forEach(l => {
     if (!logsByDate[l.date]) logsByDate[l.date] = [];
@@ -179,10 +213,8 @@ function renderCalendar() {
   const cursor = new Date(start);
 
   while (cursor <= today || cursor.getDay() !== 1) {
-    // If we're past today and hit a Monday, stop
     if (cursor > today && cursor.getDay() === 1) break;
 
-    // Month label
     if (cursor.getMonth() !== currentMonth && cursor.getDay() === 1) {
       currentMonth = cursor.getMonth();
       const label = document.createElement('div');
@@ -215,14 +247,12 @@ function renderCalendar() {
       dot.dataset.tooltip = dayLogs.map(l => l.note ? `${l.name}: ${l.note}` : l.name).join(' | ');
     }
 
-    dot.addEventListener('click', () => openModal(dateStr));
+    // Click: show view modal (info), not edit
+    dot.addEventListener('click', () => openView(dateStr));
     cal.appendChild(dot);
 
     cursor.setDate(cursor.getDate() + 1);
   }
-
-  // Scroll to bottom (most recent)
-  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
 }
 
 function renderLegend() {
@@ -238,22 +268,28 @@ function esc(str) {
   return d.innerHTML;
 }
 
-// Init
-document.getElementById('cancel-btn').addEventListener('click', closeModal);
+// --- Init ---
+document.getElementById('view-close-btn').addEventListener('click', closeView);
+document.getElementById('view-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeView();
+});
+document.getElementById('cancel-btn').addEventListener('click', closeEditModal);
 document.getElementById('save-btn').addEventListener('click', saveLogs);
 document.getElementById('add-game-btn').addEventListener('click', addGame);
-document.getElementById('open-modal-btn').addEventListener('click', () => openModal());
+document.getElementById('open-modal-btn').addEventListener('click', () => openEditModal());
 document.getElementById('new-game-name').addEventListener('keydown', e => {
   if (e.key === 'Enter') addGame();
 });
 document.getElementById('modal-overlay').addEventListener('click', e => {
-  if (e.target === e.currentTarget) closeModal();
+  if (e.target === e.currentTarget) closeEditModal();
 });
 
 (async () => {
   await loadData();
   renderLegend();
   renderCalendar();
-  // Auto-open modal on first visit
-  openModal();
+  // Scroll to bottom (most recent) on initial load
+  window.scrollTo({ top: document.body.scrollHeight });
+  // Auto-open edit modal on first visit
+  openEditModal();
 })();

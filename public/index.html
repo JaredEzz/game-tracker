@@ -7,10 +7,23 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <!-- Log Modal -->
+  <!-- View Modal (read-only info for a day) -->
+  <div id="view-overlay" class="modal-overlay">
+    <div class="modal">
+      <h2 id="view-title"></h2>
+      <p class="modal-date" id="view-date"></p>
+      <div class="view-games" id="view-games"></div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="view-close-btn">Close</button>
+        <button class="btn-primary" id="view-edit-btn">Edit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Modal -->
   <div id="modal-overlay" class="modal-overlay">
     <div class="modal">
-      <h2>What did you play today?</h2>
+      <h2 id="edit-title">What did you play?</h2>
       <p class="modal-date" id="modal-date"></p>
       <div class="game-list" id="game-list"></div>
       <div class="add-game-row">
