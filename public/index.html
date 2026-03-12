@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Game Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Log Modal -->
+  <div id="modal-overlay" class="modal-overlay">
+    <div class="modal">
+      <h2>What did you play today?</h2>
+      <p class="modal-date" id="modal-date"></p>
+      <div class="game-list" id="game-list"></div>
+      <div class="add-game-row">
+        <input type="text" id="new-game-name" placeholder="New game..." autocomplete="off">
+        <input type="color" id="new-game-color" value="#7c5cfc">
+        <button id="add-game-btn" title="Add game">+</button>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" id="cancel-btn">Close</button>
+        <button class="btn-primary" id="save-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main View -->
+  <div class="container">
+    <header>
+      <h1>Game Tracker</h1>
+      <button class="btn-log" id="open-modal-btn">+ Log</button>
+    </header>
+    <div class="legend" id="legend"></div>
+    <div class="calendar-header">
+      <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+    </div>
+    <div class="calendar" id="calendar"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
